@@ -1,0 +1,13 @@
+name = "Starfish"
+uuid = "eca66048-aa4d-46b1-a0b9-be376668ebb5"
+authors = ["Andreas Scheidegger"]
+version = "1.0.0-DEV"
+
+[compat]
+julia = "1.9"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
