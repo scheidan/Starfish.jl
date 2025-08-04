@@ -10,6 +10,12 @@ algorithm](https://en.wikipedia.org/wiki/A*_search_algorithm).
 
 ** THIS IS A PROTOTYPE! **
 
+## Installation
+
+This package is not yet registered. Install it with:
+```julia
+] add https://github.com/scheidan/Starfish.jl
+```
 
 ## Usage
 
