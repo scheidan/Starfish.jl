@@ -1,18 +1,22 @@
 # -----
 # defines function that returns the neighborhood, that is all legal moves
 
-# Return Moore neighborhood with max distance `d`
-moore_neighborhood(d::Int) = (CartesianIndex(i, j, 1) for i in -d:d, j in -d:d)
+"""
+Moore neighborhood with max distance `d`
+"""
+function moore_neighborhood(d::Int)
+    vals = sort(-d:d, by = abs)   # having "do not move" first somehow speeds up the search
+    (CartesianIndex(i, j, 1) for i in vals, j in vals)
+end
+
 
 function get_neighbor(pos, bathymetry, depth_signals; reltol = 0.1, abstol = 0.0)
 
+    d = 1
     res = CartesianIndex[]
-    for d in (CartesianIndex(0, 0, 1),                             # do not move
-              CartesianIndex(1, 0, 1), CartesianIndex(-1, 0, 1),   # up, down
-              CartesianIndex(0, 1, 1), CartesianIndex(0, -1, 1),   # left, right
-              CartesianIndex(1, 1, 1), CartesianIndex(1, -1, 1),   # diagonals
-              CartesianIndex(-1, 1, 1), CartesianIndex(-1, -1, 1)
-              )
+    sizehint!(res, (2*d+1)^2)
+
+    for d in moore_neighborhood(d)
 
         n = pos + d
         p = CartesianIndex(n[1], n[2])
