@@ -27,8 +27,6 @@ acoustic observation locations in order, while enforcing time-varying
 depth constraints. The inputs are fomats are identical as for
 Wahoo.jl.
 
-Note, only a path from the first to the last accoustic observation is returned.
-
 ## Arguments
 
 - `bathymetry::GeoArrays.GeoArray`: Raster of bathyemtry, see Wahoo.jl.
@@ -43,10 +41,10 @@ Note, only a path from the first to the last accoustic observation is returned.
 
 
 ## Return Values
-- `path::Vector{Tuple{Float64, Float64}}`: coordinates defining the path
-- `time_start`: time index of begining of path
-- `time_end`: time index of end of path
-- `path_length`: the (spatial) length of the whole path measured in "pixel steps"
+- `path::Vector{Tuple{Float64, Float64}}`: The coordinates defining the path for each time step.
+                                           Time steps for which no path was found hold `(NaN, NaN)`.
+- `path_length`: total (spatial) length of the found path.
+- `costs`: total cost of the found path.
 """
 function find_shortest_trajectory(bathymetry::GeoArrays.GeoArray,
                                   acoustic_signals, acoustic_pos,
@@ -55,7 +53,7 @@ function find_shortest_trajectory(bathymetry::GeoArrays.GeoArray,
                                   reltol = 0.0, abstol = 0.0)
     # --
     # 1) get time and location of all accoustic detections
-    # N.B. if we have multibe detection at the same time, only one is used!
+    # N.B. if we have multiple detections at the same time, only one is used!
     obs_points = []
     obs_time = []
     for s in 1:length(acoustic_signals)
@@ -88,6 +86,7 @@ function find_shortest_trajectory(bathymetry::GeoArrays.GeoArray,
 
     all_path = []
     total_costs = 0
+    total_length = 0
     p = Progress(length(obs_points_ci)-1; dt=0.1, desc="Find paths...")
     for i in 1:(length(obs_points_ci)-1)
 
@@ -102,13 +101,13 @@ function find_shortest_trajectory(bathymetry::GeoArrays.GeoArray,
                                     maxcost = maxcosts # limits search space
                                     )
 
-        if result.status != :success
-            println(result.status)
-            @warn "no path found from time $(obs_time[i]) to $(obs_time[i+1])!",  obs_points_ci[i], obs_points_ci[i+1]
-            break
+        if result.status == :success
+            push!(all_path, result.path)
+            total_costs += result.cost
+            total_length += result.cost - (obs_points_ci[i+1] - obs_points_ci[i])[3]
+        else
+            @warn "No path found from $(obs_points_ci[i].I[1:2]) to $(obs_points_ci[i+1].I[1:2]), time = $(obs_time[i]):$(obs_time[i+1])!"
         end
-        push!(all_path, result.path)
-        total_costs += result.cost
         next!(p)
     end
 
@@ -116,18 +115,16 @@ function find_shortest_trajectory(bathymetry::GeoArrays.GeoArray,
     # 4) concatenate to one path
 
     # convert to coordinates and concatenate
-    all_path_coord = [[Tuple(GeoArrays.coords(bathymetry, (c[1], c[2]))) for c in p] for p in all_path]
-
-    path = [all_path_coord[1][1]]
-    for p in all_path_coord
-        append!(path,  p[2:end])
+    path = fill((NaN, NaN), length(depth_signals))
+    for p in all_path
+        idxs = p[1][3]:p[end][3]
+        path[idxs] .= [Tuple(GeoArrays.coords(bathymetry, (c[1], c[2]))) for c in p]
     end
 
-
+    # --
     (path = path,
-     time_start = minimum(obs_time),
-     time_end =  minimum(obs_time) + length(path) - 1,
-     path_length = total_costs - length(path)
+     path_length = total_length,
+     costs = total_costs
      )
 end
 
