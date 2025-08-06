@@ -10,7 +10,7 @@ function moore_neighborhood(d::Int)
 end
 
 
-function get_neighbor(pos, bathymetry, depth_signals; reltol = 0.1, abstol = 0.0)
+function get_neighbor(pos, bathymetry, depth_signals; seabed_tol = 0.0, benthic_tol = Inf)
 
     d = 1
     res = CartesianIndex[]
@@ -26,7 +26,8 @@ function get_neighbor(pos, bathymetry, depth_signals; reltol = 0.1, abstol = 0.0
             (1 ≤ p[2] ≤ size(bathymetry)[2]) &&
             time <= length(depth_signals) &&
             (bathymetry[p] > 0) &&
-            (max(abstol, bathymetry[p] * (1+reltol)) > depth_signals[time])
+            bathymetry[p] + seabed_tol > depth_signals[time] &&
+            bathymetry[p] - depth_signals[time] < benthic_tol
 
         if is_accessible
             push!(res, n)
@@ -37,6 +38,6 @@ end
 
 # helper to make a typestable closure
 function make_neighbor_function(bathymetry::AbstractMatrix{Tb}, depth::AbstractVector{Td};
-                                reltol::Tr = 0.1, abstol::Ta = 10.0) where {Tb,Td,Tr,Ta}
-    (pos::CartesianIndex{3}) -> get_neighbor(pos, bathymetry, depth; reltol=reltol, abstol=abstol)
+                                benthic_tol::Tr = 0.1, seabed_tol::Ta = 10.0) where {Tb,Td,Tr,Ta}
+    (pos::CartesianIndex{3}) -> get_neighbor(pos, bathymetry, depth; seabed_tol = seabed_tol, benthic_tol = benthic_tol)
 end

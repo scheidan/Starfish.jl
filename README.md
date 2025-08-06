@@ -69,7 +69,9 @@ res = find_shortest_trajectory(bathymetry_map,
                                acoustic_signals, acoustic_pos,
                                depth_signals,
                                goal_tol = 2,
-                               abstol = 10, reltol=0.1);
+                               seabed = (tol = 20.0, adapt_rate = 0.1),
+                               benthic = (tol = Inf, adapt_rate = 0.0),
+                               adaptation_steps = 10);
 
 res.path_length
 
