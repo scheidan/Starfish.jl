@@ -18,9 +18,9 @@ using ProgressMeter: Progress, next!
         acoustic_pos,
         depth_signals;
         goal_tol::Int = 0,
-        seabed_tol::Float64 = 0.0,
-        benthic_tol::Float64 = 0.0,
-        tol_adaptation_rate::Float64 = -1
+        seabed = (tol = 0.0, adapt_rate = 0.0),
+        benthic = (tol = Inf, adapt_rate = 0.0),
+        adaptation_steps::Int = 0
     )
 
 Compute the shortest path through a bathymetry grid that visits all
@@ -47,9 +47,9 @@ Wahoo.jl.
                                            Time steps for which no path was found hold `(NaN, NaN)`.
 - `path_length`: total (spatial) length of the found path.
 - `costs`: total cost of the found path.
-- `seabed_tols`: the seabed tolerances usesd for each time step.
-- `benthic_tols`: the benthic tolerances usesd for each time step.
-
+- `seabed`: named tuple with `tol` specifiying the adaptation_steps::Int and `adapt` the adpatation rate.
+- `benthic`: named tuple with `tol` specifiying the benthic tolerance and `adapt` the adpatation rate.
+- `adaptation_steps::Int`: maximum number of times the seabed and bentic tolerances are enlarged.
 
 ```
 
@@ -63,14 +63,14 @@ Wahoo.jl.
             •••••••
                ▲
                │                 ▓▓▓
-      ><(((°>  │ benthic_tol  ▓▓▓▓░░
+      ><(((°>  │ benthic.tol  ▓▓▓▓░░
                │            ▓▓▓░░
                │          ▓▓░░░
                ▼       ▓▓▓▓░░
       ▓     ▓▓▓▲▓▓▓▓▓▓▓▓░░░░
       ░▓▓▓▓▓░░░│░░░░░░░░░
        ░░░░░░  │
-               ▼  seabed_tol
+               ▼  seabed.tol
             •••••••
 ```
 """
