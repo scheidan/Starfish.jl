@@ -49,6 +49,30 @@ Wahoo.jl.
 - `costs`: total cost of the found path.
 - `seabed_tols`: the seabed tolerances usesd for each time step.
 - `benthic_tols`: the benthic tolerances usesd for each time step.
+
+
+```
+
+                     /|
+                    /_|
+                  \\____/
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+            •••••••
+               ▲
+               │                 ▓▓▓
+      ><(((°>  │ benthic_tol  ▓▓▓▓░░
+               │            ▓▓▓░░
+               │          ▓▓░░░
+               ▼       ▓▓▓▓░░
+      ▓     ▓▓▓▲▓▓▓▓▓▓▓▓░░░░
+      ░▓▓▓▓▓░░░│░░░░░░░░░
+       ░░░░░░  │
+               ▼  seabed_tol
+            •••••••
+```
 """
 function find_shortest_trajectory(bathymetry::GeoArrays.GeoArray,
                                   acoustic_signals, acoustic_pos,
