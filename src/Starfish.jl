@@ -18,8 +18,9 @@ using ProgressMeter: Progress, next!
         acoustic_pos,
         depth_signals;
         goal_tol::Int = 0,
-        reltol::Float64 = 0.0,
-        abstol::Float64 = 0.0
+        seabed = (tol = 0.0, adapt_rate = 0.0),
+        benthic = (tol = Inf, adapt_rate = 0.0),
+        adaptation_steps::Int = 0
     )
 
 Compute the shortest path through a bathymetry grid that visits all
@@ -36,8 +37,9 @@ Wahoo.jl.
 
 - `goal_tol::Int = 0`: tolerance for reaching each acoustic target location measured in pixels.
                        Controls the receiver range.
-- `reltol::Float64 = 0.1`: Relative tolerance for depth measurements
-- `abstol::Float64 = 0.0`: Absolute tolerance for depth measurements
+- `seabed = (tol = 0.0, adapt_rate = 0.0)`: named tuple with tolerance for depth measurements and adaptation rate
+- `benthic = (tol = Inf, adapt_rate = 0.0)`: named tuple with tolerance for bentic behavior and adaptation rate
+- `adaptation_steps::Int = 0`: maximal number of adaptation steps
 
 
 ## Return Values
@@ -45,12 +47,40 @@ Wahoo.jl.
                                            Time steps for which no path was found hold `(NaN, NaN)`.
 - `path_length`: total (spatial) length of the found path.
 - `costs`: total cost of the found path.
+- `seabed`: named tuple with `tol` specifiying the adaptation_steps::Int and `adapt` the adpatation rate.
+- `benthic`: named tuple with `tol` specifiying the benthic tolerance and `adapt` the adpatation rate.
+- `adaptation_steps::Int`: maximum number of times the seabed and bentic tolerances are enlarged.
+
+```
+
+                     /|
+                    /_|
+                  \\____/
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+            •••••••
+               ▲
+               │                 ▓▓▓
+      ><(((°>  │ benthic.tol  ▓▓▓▓░░
+               │            ▓▓▓░░
+               │          ▓▓░░░
+               ▼       ▓▓▓▓░░
+      ▓     ▓▓▓▲▓▓▓▓▓▓▓▓░░░░
+      ░▓▓▓▓▓░░░│░░░░░░░░░
+       ░░░░░░  │
+               ▼  seabed.tol
+            •••••••
+```
 """
 function find_shortest_trajectory(bathymetry::GeoArrays.GeoArray,
                                   acoustic_signals, acoustic_pos,
                                   depth_signals;
                                   goal_tol::Int = 0,
-                                  reltol = 0.0, abstol = 0.0)
+                                  seabed = (tol = 0.0, adapt_rate = 0.0),
+                                  benthic = (tol = Inf, adapt_rate = 0.0),
+                                  adaptation_steps::Int = 0)
     # --
     # 1) get time and location of all accoustic detections
     # N.B. if we have multiple detections at the same time, only one is used!
@@ -80,11 +110,12 @@ function find_shortest_trajectory(bathymetry::GeoArrays.GeoArray,
 
     # --
     # 3) find paths
-    _get_neighbor = make_neighbor_function(bathymetry.A,  depth_signals; reltol = reltol, abstol = abstol)
 
     _isgoal(p, g)::Bool = isgoal(p, g, goal_tol)
 
     all_path = []
+    seabed_tols_p = Float64[]
+    benthic_tols_p = Float64[]
     total_costs = 0
     total_length = 0
     p = Progress(length(obs_points_ci)-1; dt=0.1, desc="Find paths...")
@@ -93,19 +124,35 @@ function find_shortest_trajectory(bathymetry::GeoArrays.GeoArray,
         # the maximal costs per time step is 2
         maxcosts = 2 * (obs_points_ci[i+1] - obs_points_ci[i])[3]
 
-        result =  AStarSearch.astar(_get_neighbor,
-                                    obs_points_ci[i], obs_points_ci[i+1],
-                                    heuristic = dist_heuristic,
-                                    cost = cost,
-                                    isgoal =  _isgoal,
-                                    maxcost = maxcosts # limits search space
-                                    )
+        found_path = false
+        for k in 0:adaptation_steps
 
-        if result.status == :success
-            push!(all_path, result.path)
-            total_costs += result.cost
-            total_length += result.cost - (obs_points_ci[i+1] - obs_points_ci[i])[3]
-        else
+            s_tol = seabed.tol * (1 + seabed.adapt_rate)^k
+            b_tol = benthic.tol * (1 + benthic.adapt_rate)^k
+
+            _get_neighbor = make_neighbor_function(bathymetry.A,  depth_signals;
+                                                   seabed_tol = s_tol,
+                                                   benthic_tol = b_tol)
+
+            result =  AStarSearch.astar(_get_neighbor,
+                                        obs_points_ci[i], obs_points_ci[i+1],
+                                        heuristic = dist_heuristic,
+                                        cost = cost,
+                                        isgoal =  _isgoal,
+                                        maxcost = maxcosts # limits search space
+                                        )
+
+            if result.status == :success
+                found_path = true
+                push!(all_path, result.path)
+                total_costs += result.cost
+                total_length += result.cost - (obs_points_ci[i+1] - obs_points_ci[i])[3]
+                push!(seabed_tols_p, s_tol)
+                push!(benthic_tols_p, b_tol)
+                break
+            end
+        end
+        if !found_path
             @warn "No path found from $(obs_points_ci[i].I[1:2]) to $(obs_points_ci[i+1].I[1:2]), time = $(obs_time[i]):$(obs_time[i+1])!"
         end
         next!(p)
@@ -116,15 +163,21 @@ function find_shortest_trajectory(bathymetry::GeoArrays.GeoArray,
 
     # convert to coordinates and concatenate
     path = fill((NaN, NaN), length(depth_signals))
-    for p in all_path
+    seabed_tols = fill(NaN, length(depth_signals))
+    benthic_tols = fill(NaN, length(depth_signals))
+    for (i,p) in enumerate(all_path)
         idxs = p[1][3]:p[end][3]
         path[idxs] .= [Tuple(GeoArrays.coords(bathymetry, (c[1], c[2]))) for c in p]
+        seabed_tols[idxs] .= seabed_tols_p[i]
+        benthic_tols[idxs] .= benthic_tols_p[i]
     end
 
     # --
     (path = path,
      path_length = total_length,
-     costs = total_costs
+     costs = total_costs,
+     seabed_tols = seabed_tols,
+     benthic_tols = benthic_tols,
      )
 end
 

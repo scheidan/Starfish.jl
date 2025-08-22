@@ -22,6 +22,57 @@ This package is not yet registered. Install it with:
 See the docstring for `find_shortest_trajectory` for details. The input format is
 identical as for [`Wahoo.jl`](https://github.com/scheidan/Wahoo.jl).
 
+### Tolerances and Adaptation
+
+We define two tolerance parameters to determine which regions a fish
+can traverse at any given time:
+
+```
+
+                         /|
+                        /_|
+                      \____/
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~▓▓▓▓
+                                                ▓▓▓░░░░
+                                              ▓▓░░░
+                                         ▓▓▓▓▓░░
+            •••••••                   ▓▓▓░░░░░
+               ▲                    ▓▓░░░
+               │                 ▓▓▓░░
+      ><(((°>  │ benthic.tol   ▓▓▓░░
+               │            ▓▓▓░░
+               │          ▓▓░░░
+               ▼       ▓▓▓▓░
+      ▓     ▓▓▓▲▓▓▓▓▓▓▓▓░░░
+      ░▓▓▓▓▓░░░│░░░░░░░░
+       ░░░░░   │
+               ▼  seabed.tol
+            •••••••
+```
+
+- Seabed tolerance: A fish cannot occupy any location where the
+  bathymetric depth is shallower than the recorded depth of the
+  fish. Because bathymetry data contain uncertainty, the seabed
+  tolerance allows the fish to “penetrate” slightly into areas that
+  would otherwise be considered impassable.
+
+- Benthic tolerance: Many species spend most of their time close to
+  the seabed. The benthic tolerance controls how far above the seabed
+  a fish is allowed to swim.
+
+
+In particular the benthic tolerance can be difficult to set a
+priori. A fish might normally swim very close to the bottom, but
+certain paths require temporarily gaining extra clearance. To handle
+this, we use an adaptation mechanism that increases the benthic
+tolerance until a viable trajectory is found. Specifically, if no path
+between to detections exists under the current tolerance, we multiply
+the tolerance by `(1 + adapt_rate)^i` where `i in 1: adaptation
+step`. This ensures that the model can flexibly adjust its constraint
+when necessary.
+
+
+
 ### Example
 
 A minimal example with artificial data:
@@ -69,7 +120,9 @@ res = find_shortest_trajectory(bathymetry_map,
                                acoustic_signals, acoustic_pos,
                                depth_signals,
                                goal_tol = 2,
-                               abstol = 10, reltol=0.1);
+                               seabed = (tol = 20.0, adapt_rate = 0.1),
+                               benthic = (tol = Inf, adapt_rate = 0.0),
+                               adaptation_steps = 10);
 
 res.path_length
 
